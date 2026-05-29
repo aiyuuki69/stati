@@ -2,49 +2,44 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>StatiCrypt Bruteforcer</title>
+    <title>StatiCrypt フルオートブレイカー</title>
     <style>
         body { font-family: sans-serif; margin: 30px; background: #1e1e1e; color: #fff; }
         .container { max-width: 600px; margin: 0 auto; background: #2d2d2d; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .form-group { margin-bottom: 20px; }
         label { font-weight: bold; display: block; margin-bottom: 5px; color: #bbb; }
         input[type="file"] { background: #3a3a3a; padding: 10px; border-radius: 4px; border: 1px solid #555; width: 93%; color: #fff; }
-        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #0056b3; }
+        button { width: 100%; padding: 12px; background: #e0a800; color: #000; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #c69500; }
         #logView { margin-top: 20px; height: 350px; overflow-y: auto; background: #000; padding: 15px; font-family: 'Courier New', monospace; border-radius: 4px; border: 1px solid #444; line-height: 1.6; }
         .fail { color: #ff4d4d; }
-        .skip { color: #888888; font-style: italic; }
         .success { color: #2bed6b; font-weight: bold; font-size: 1.4em; display: block; border: 3px solid #2bed6b; padding: 15px; margin: 15px 0; background: rgba(43, 237, 107, 0.1); text-align: center; box-shadow: 0 0 15px rgba(43, 237, 107, 0.3); }
     </style>
 </head>
 <body>
 <div class="container">
-    <h2>StatiCrypt 自動解析パネル</h2>
+    <h2>StatiCrypt フルオート解析パネル</h2>
     <div class="form-group">
-        <label>対象のStatiCrypt HTMLファイルを選択してください:</label>
+        <label>対象のStatiCrypt HTMLファイルを選択:</label>
         <input type="file" id="targetFile" accept=".html">
     </div>
-    <button id="startBtn">自動総当たりを実行</button>
+    <button id="startBtn">完全自動総当たりを開始</button>
 
     <h3>結果プレビュー</h3>
-    <div id="logView">ファイルを指定してボタンを押してください。</div>
+    <div id="logView">ファイルを指定してボタンを押すと、自動生成して無限に試行します。</div>
 </div>
 
 <script>
-// 📝 ここに試したいパスワードの候補を自由に並べてください
-const passwordList = [
-    "1234",
-    "password",
-    "cheat",
-    "patch",
-    "keyskip",
-    "vip",
-    "free",
-    "ywp"
-    // 必要に応じて後ろにカンマ区切りで追加してください
-];
+let isRunning = false;
 
 document.getElementById('startBtn').addEventListener('click', async () => {
+    if (isRunning) {
+        isRunning = false;
+        document.getElementById('startBtn').innerText = "完全自動総当たりを開始";
+        document.getElementById('startBtn').style.background = "#e0a800";
+        return;
+    }
+
     const targetFile = document.getElementById('targetFile').files[0];
     const logView = document.getElementById('logView');
     
@@ -53,43 +48,53 @@ document.getElementById('startBtn').addEventListener('click', async () => {
         return;
     }
 
-    logView.innerHTML = "[*] 内蔵辞書による自動解析を開始しました...<br>";
-    logView.innerHTML += `[*] 総候補数: ${passwordList.length} 件<br>----------------------------------<br>`;
+    isRunning = true;
+    document.getElementById('startBtn').innerText = "一時停止する";
+    document.getElementById('startBtn').style.background = "#dc3545";
+    document.getElementById('startBtn').style.color = "#fff";
+    
+    logView.innerHTML = "[*] 自動生成システムを起動しました...<br>----------------------------------<br>";
 
     const htmlText = await targetFile.text();
 
-    // パスワードの配列を1件ずつ順番に送信処理
-    for(let password of passwordList) {
+    // 成功するか、ユーザーが止めるまで無限ループ
+    while(isRunning) {
         const formData = new FormData();
         formData.append("html_content", htmlText);
-        formData.append("password", password);
 
         try {
-            const res = await fetch('/decrypt', { method: 'POST', body: formData });
+            const res = await fetch('/decrypt_auto', { method: 'POST', body: formData });
             const data = await res.json();
 
             if (data.status === "success") {
-                // 成功時は緑色の大きな目立つ枠を表示し、ループを即時停止
-                logView.innerHTML += `<div class="success">【結果のパスワード 成功】<br>正解パスワード：${password}</div>`;
+                logView.innerHTML += `<div class="success">【結果のパスワード 成功】<br>正解パスワード：${data.password}</div>`;
                 logView.scrollTop = logView.scrollHeight;
+                isRunning = false;
+                resetButton();
                 break; 
-            } else if (data.status === "skipped") {
-                // 過去にテスト済みの場合はグレー色でスキップ通知
-                logView.innerHTML += `<span class="skip">${password} ➡️ 過去に試行済みのためスキップ</span><br>`;
-                logView.scrollTop = logView.scrollHeight;
             } else if (data.status === "error") {
                 logView.innerHTML += `<span class="fail">[エラー] ${data.message}</span><br>`;
+                isRunning = false;
+                resetButton();
                 break;
             } else {
-                // 失敗時は指定通り赤文字で「失敗」を出力
-                logView.innerHTML += `<span class="fail">${password} 失敗(赤色の文字)</span><br>`;
+                // 自動生成された文字列と失敗（赤文字）を表示
+                logView.innerHTML += `<span class="fail">${data.password} 失敗(赤色の文字)</span><br>`;
                 logView.scrollTop = logView.scrollHeight;
             }
         } catch (e) {
-            logView.innerHTML += `<span class="fail">[通信エラー] ${password} の通信に失敗しました。</span><br>`;
+            logView.innerHTML += `<span class="fail">[通信エラー] サーバー応答なし。1秒後に再試行します...</span><br>`;
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
 });
+
+function resetButton() {
+    const btn = document.getElementById('startBtn');
+    btn.innerText = "完全自動総当たりを開始";
+    btn.style.background = "#e0a800";
+    btn.style.color = "#000";
+}
 </script>
 </body>
 </html>
