@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>StatiCrypt Bruteforcer</title>
+    <style>
+        body { font-family: sans-serif; margin: 30px; background: #1e1e1e; color: #fff; }
+        .container { max-width: 600px; margin: 0 auto; background: #2d2d2d; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .form-group { margin-bottom: 20px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; color: #bbb; }
+        input[type="file"] { background: #3a3a3a; padding: 10px; border-radius: 4px; border: 1px solid #555; width: 93%; color: #fff; }
+        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #218838; }
+        #logView { margin-top: 20px; height: 350px; overflow-y: auto; background: #000; padding: 15px; font-family: 'Courier New', monospace; border-radius: 4px; border: 1px solid #444; line-height: 1.6; }
+        .fail { color: #ff4d4d; }
+        .success { color: #2bed6b; font-weight: bold; font-size: 1.3em; display: block; border: 3px solid #2bed6b; padding: 10px; margin: 15px 0; background: rgba(43, 237, 107, 0.1); text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>StatiCrypt クラッカーパネル</h2>
+    <div class="form-group">
+        <label>① 対象のStatiCrypt HTMLファイル:</label>
+        <input type="file" id="targetFile" accept=".html">
+    </div>
+    <div class="form-group">
+        <label>② パスワード辞書ファイル (passwords.txt):</label>
+        <input type="file" id="dictFile" accept=".txt">
+    </div>
+    <button id="startBtn">総当たり実行</button>
+
+    <h3>結果プレビュー</h3>
+    <div id="logView">ファイルを選択して実行してください...</div>
+</div>
+
+<script>
+document.getElementById('startBtn').addEventListener('click', async () => {
+    const targetFile = document.getElementById('targetFile').files[0];
+    const dictFile = document.getElementById('dictFile').files[0];
+    const logView = document.getElementById('logView');
+    
+    if(!targetFile || !dictFile) {
+        alert("両方のファイルを選択してください。");
+        return;
+    }
+
+    logView.innerHTML = "[*] 解析処理を開始しました...<br>";
+
+    // ファイルの読み込み
+    const passwords = (await dictFile.text()).split(/\r?\n/).filter(p => p.trim() !== "");
+    const htmlText = await targetFile.text();
+
+    // 1件ずつバックエンドに投げてリアルタイム処理
+    for(let password of passwords) {
+        const formData = new FormData();
+        formData.append("html_content", htmlText);
+        formData.append("password", password);
+
+        try {
+            const res = await fetch('/decrypt', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (data.status === "success") {
+                logView.innerHTML += `<span class="success">【結果のパスワード 成功】 正解: ${password}</span>`;
+                logView.scrollTop = logView.scrollHeight;
+                break; // 成功したら即座に停止
+            } else {
+                logView.innerHTML += `<span class="fail">${password} 失敗</span><br>`;
+                logView.scrollTop = logView.scrollHeight;
+            }
+        } catch (e) {
+            logView.innerHTML += `<span class="fail">[エラー] サーバー通信失敗 (${password})</span><br>`;
+        }
+    }
+});
+</script>
+</body>
+</html>
